@@ -28,9 +28,9 @@
     display: flex;
     flex-direction: column;
     height: calc(100vh - 16px);
-    max-width: 1800px;
+    max-width: 1500px;
     margin: 0 auto;
-    padding: 0 16px;
+    padding: 0 24px;
     min-width: 320px;
   }
   
@@ -58,11 +58,11 @@
   }
   .layout {
     display: grid;
-    grid-template-columns: 290px 1fr 290px;
+    grid-template-columns: 280px 1fr 380px;
     gap: 8px;
     flex: 1;
     min-height: 0;
-    min-width: 1200px;  /* 가로 스크롤 발생 임계점 */
+    min-width: 1200px;
   }
   
   /* 가로 스크롤 시 보이도록 wrapper */
@@ -213,9 +213,12 @@
     width: 100%;
     margin-top: 8px;
     margin-bottom: 8px;
-    flex-shrink: 0;  /* 절대 줄어들지 않음 */
+    flex-shrink: 0;
     flex-grow: 0;
     z-index: 10;
+  }
+  .action-buttons .action-btn {
+    flex: 1;
   }
   .panel.right {
     display: flex;
@@ -585,12 +588,12 @@
   }
   .tool-btn .icon { font-size: 18px; }
 
-  /* 캔버스 옆 세로 사이드바 - canvas-area 안에 fit */
+  /* 캔버스 옆 세로 사이드바 - 인덱스 형식 (좌 아이콘 + 우 텍스트) */
   .canvas-side-bar {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    width: 56px;
+    width: 100px;
     flex-shrink: 0;
     align-self: stretch;
     min-height: 0;
@@ -604,19 +607,19 @@
     height: 0 !important;
   }
   .canvas-side-bar .tool-btn {
-    padding: 2px !important;
-    font-size: 10px !important;
+    padding: 2px 6px !important;
+    font-size: 12px !important;
     border-radius: 5px !important;
     border-width: 1px !important;
     line-height: 1.1 !important;
-    gap: 1px !important;
+    gap: 6px !important;
     overflow: hidden !important;
     background: #f0f0f0;
     color: #333;
     display: flex !important;
-    flex-direction: column !important;
+    flex-direction: row !important;
     align-items: center !important;
-    justify-content: center !important;
+    justify-content: flex-start !important;
     cursor: pointer;
     border: 1px solid #ddd;
     font-family: inherit;
@@ -631,15 +634,17 @@
     border-color: #2c70c0 !important;
   }
   .canvas-side-bar .tool-btn .icon {
-    font-size: 17px !important;
+    font-size: 18px !important;
     line-height: 1 !important;
     margin: 0 !important;
+    flex-shrink: 0;
   }
   .canvas-side-bar .tool-btn span:not(.icon) {
-    font-size: 10px !important;
+    font-size: 12px !important;
     line-height: 1 !important;
     white-space: nowrap;
     font-weight: 600;
+    text-align: left;
   }
   .side-divider {
     display: none;
@@ -648,16 +653,16 @@
     background: #fff7ed;
     border: 1px solid #fdba74;
     border-radius: 5px;
-    padding: 2px !important;
+    padding: 2px 6px !important;
     cursor: pointer;
     font-family: inherit;
     color: #c2410c;
     transition: all 0.15s;
     display: flex !important;
-    flex-direction: column !important;
+    flex-direction: row !important;
     align-items: center !important;
-    justify-content: center !important;
-    gap: 1px !important;
+    justify-content: flex-start !important;
+    gap: 6px !important;
     font-weight: 600;
     overflow: hidden !important;
     line-height: 1.1 !important;
@@ -673,13 +678,15 @@
     cursor: not-allowed;
   }
   .history-btn-v .hbv-icon {
-    font-size: 17px !important;
+    font-size: 18px !important;
     line-height: 1 !important;
+    flex-shrink: 0;
   }
   .history-btn-v .hbv-label {
-    font-size: 10px !important;
+    font-size: 12px !important;
     line-height: 1 !important;
     font-weight: 600;
+    text-align: left;
   }
 
   .emoji-tabs {
@@ -1201,7 +1208,7 @@
           <button class="template-btn" onclick="insertTemplate('clear')">비우기</button>
         </div>
         <textarea id="messageInput" class="message-textarea" placeholder="고객님께 보낼 메시지를 입력해주세요...&#10;&#10;예시)&#10;안녕하세요 고객님,&#10;문의주신 제품의 도면을 보내드립니다.&#10;확인 부탁드립니다 :)"></textarea>
-        <button class="action-btn copy-msg" style="margin-top:8px; flex:none;" onclick="copyMessage()">📋 메시지 복사</button>
+        <button class="action-btn copy-msg" style="margin-top:8px; margin-bottom:8px; flex:none; flex-shrink:0;" onclick="copyMessage()">📋 메시지 복사</button>
       </div>
     </div>
   </div>
@@ -4427,15 +4434,14 @@ updateToolOptions();
 saveHistory();
 drawCanvas();
 
-// 캔버스 wrapper와 사이드바 크기를 화면에 맞게 조정
-// 핵심: 하단 잘림 절대 방지 - 푸터까지 모두 보이도록 캔버스를 줄임
+// 캔버스 wrapper와 사이드바를 화면에 맞게 조정
+// 핵심: PNG 저장/이미지 복사 버튼이 항상 화면에 보이도록 캔버스 영역 제한
 function syncCanvasLayout() {
   const area = document.querySelector('.canvas-area');
   const wrapper = document.querySelector('.canvas-wrapper');
   const sideBar = document.querySelector('.canvas-side-bar');
-  const panelCenter = document.querySelector('.panel.center');
   const actionButtons = document.querySelector('.panel.center .action-buttons');
-  const previewLabel = document.querySelector('.panel.center .preview-label, .panel.center .preview-header');
+  const previewHeader = document.querySelector('.panel.center .preview-header, .panel.center .preview-label');
   const footer = document.querySelector('.app-footer');
   const h1 = document.querySelector('h1');
   if (!area || !wrapper || !sideBar) return;
@@ -4443,63 +4449,57 @@ function syncCanvasLayout() {
   // 강제 크기 풀어 자연 area 측정
   wrapper.style.width = '';
   wrapper.style.height = '';
-  wrapper.style.maxWidth = '';
-  wrapper.style.maxHeight = '';
-  area.style.maxHeight = '';
   sideBar.style.height = '';
   sideBar.style.maxHeight = '';
   
-  // 1. 화면 전체 높이에서 잘리면 안되는 요소들의 높이를 모두 빼서 캔버스에 사용 가능한 높이 계산
+  // 화면 전체 높이에서 잘리면 안되는 요소들 빼서 캔버스 영역 최대 높이 계산
   const viewportH = window.innerHeight;
-  const h1H = h1 ? h1.offsetHeight : 30;
-  const previewH = previewLabel ? previewLabel.offsetHeight : 20;
-  const actionH = actionButtons ? actionButtons.offsetHeight : 40;
-  const footerH = footer ? footer.offsetHeight : 50;
-  const topLineH = 8;            // 상단 파란 라인
-  const safetyMargin = 80;       // 안전 여유 대폭 증가
-  const panelPadding = 20;       // panel.center padding (상하)
+  const h1H = h1 ? h1.offsetHeight : 40;
+  const previewH = previewHeader ? previewHeader.offsetHeight : 24;
+  const actionH = actionButtons ? actionButtons.offsetHeight : 50;
+  const footerH = footer ? footer.offsetHeight : 60;
+  const topLineH = 8;
+  const safetyMargin = 60;
   
-  // panel.center 안에서 캔버스 영역이 사용할 수 있는 최대 높이
-  // 모든 잘리면 안되는 요소를 빼고, 추가로 안전 여유를 둠
-  const maxCanvasAreaH = viewportH - h1H - previewH - actionH - footerH - topLineH - safetyMargin - panelPadding;
+  // 캔버스가 사용할 수 있는 최대 안전 높이
+  const maxSafeH = viewportH - h1H - previewH - actionH - footerH - topLineH - safetyMargin;
   
-  // 2. 가로 사용 가능 폭 계산
+  // 가로 사용 가능 폭
   const areaRect = area.getBoundingClientRect();
   const sideBarWidth = 56;
   const gap = 5;
   const availW = areaRect.width - sideBarWidth - gap;
   
-  // 캔버스 영역 사용 가능 높이 = 측정된 실제 높이 vs 화면 안전 높이 중 작은 값
-  const availH = Math.max(150, Math.min(areaRect.height, maxCanvasAreaH));
+  // 가로 폭이 너무 작으면 (초기 렌더링 시) 적용 안 함 - 캔버스 정상 표시
+  if (availW < 100) return;
   
-  if (availW <= 0) return;
-  
-  // 캔버스 비율 1088:889 (≈1.224:1)
+  // 캔버스 비율 1088:889
   const canvasRatio = 1088 / 889;
   
-  // 사용 가능한 영역에 캔버스 fit (좌우 또는 상하 여백 발생)
+  // 사용 가능한 영역 높이 (화면 안전 높이로 제한)
+  const availH = Math.max(200, Math.min(areaRect.height, maxSafeH));
+  
+  // 비율 fit 계산
   let displayW, displayH;
   if (availW / availH > canvasRatio) {
-    // 가로가 더 넓음 → 높이 기준 (좌우 여백)
     displayH = Math.floor(availH);
     displayW = Math.floor(displayH * canvasRatio);
   } else {
-    // 세로가 더 김 → 폭 기준 (상하 여백)
     displayW = Math.floor(availW);
     displayH = Math.floor(displayW / canvasRatio);
   }
   
-  // wrapper 크기 강제 - 캔버스 비율로 정확히 fit
+  // 안전 검증 - 너무 작거나 잘못된 값이면 적용 안 함
+  if (displayW < 100 || displayH < 100) return;
+  
+  // wrapper 크기 강제
   wrapper.style.width = displayW + 'px';
   wrapper.style.height = displayH + 'px';
   wrapper.style.flex = 'none';
   
-  // 사이드바도 같은 높이로 강제 - 절대 노란박스보다 길어지지 않게
+  // 사이드바 높이를 캔버스와 정확히 일치
   sideBar.style.height = displayH + 'px';
   sideBar.style.maxHeight = displayH + 'px';
-  
-  // canvas-area 자체도 max-height 설정해서 절대 화면을 벗어나지 않도록
-  area.style.maxHeight = displayH + 'px';
 }
 
 // 초기화
@@ -4513,6 +4513,7 @@ window.addEventListener('resize', syncCanvasLayout);
 window.addEventListener('load', syncCanvasLayout);
 setTimeout(syncCanvasLayout, 100);
 setTimeout(syncCanvasLayout, 500);
+setTimeout(syncCanvasLayout, 1000);
 </script>
 </body>
 </html>
