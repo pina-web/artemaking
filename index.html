@@ -1513,6 +1513,13 @@ function processImageFiles(files) {
     syncSlidersFromActiveImage();
     updateImageThumbs();
     drawCanvas();
+    
+    // 이미지 업로드로 패널 내용이 변경되어 레이아웃 재계산 필요
+    if (typeof syncCanvasLayout === 'function') {
+      syncCanvasLayout();
+      setTimeout(syncCanvasLayout, 50);
+      setTimeout(syncCanvasLayout, 200);
+    }
   }
 }
 
@@ -4451,6 +4458,7 @@ function syncCanvasLayout() {
   wrapper.style.height = '';
   sideBar.style.height = '';
   sideBar.style.maxHeight = '';
+  area.style.maxHeight = '';
   if (actionButtons) {
     actionButtons.style.width = '';
   }
@@ -4462,7 +4470,7 @@ function syncCanvasLayout() {
   const actionH = actionButtons ? actionButtons.offsetHeight : 50;
   const footerH = footer ? footer.offsetHeight : 60;
   const topLineH = 8;
-  const safetyMargin = 60;
+  const safetyMargin = 40;
   
   // 캔버스가 사용할 수 있는 최대 안전 높이
   const maxSafeH = viewportH - h1H - previewH - actionH - footerH - topLineH - safetyMargin;
@@ -4479,8 +4487,8 @@ function syncCanvasLayout() {
   // 캔버스 비율 1088:889
   const canvasRatio = 1088 / 889;
   
-  // 사용 가능한 영역 높이 (화면 안전 높이로 제한)
-  const availH = Math.max(200, Math.min(areaRect.height, maxSafeH));
+  // ★ 핵심: 캔버스 영역은 무조건 화면 안전 높이를 넘지 못하도록 제한
+  const availH = Math.min(Math.max(200, areaRect.height), maxSafeH);
   
   // 비율 fit 계산
   let displayW, displayH;
@@ -4500,12 +4508,14 @@ function syncCanvasLayout() {
   wrapper.style.height = displayH + 'px';
   wrapper.style.flex = 'none';
   
+  // canvas-area 자체도 max-height로 제한 (다른 요소들이 밀어내지 못하도록)
+  area.style.maxHeight = displayH + 'px';
+  
   // 사이드바 높이를 캔버스와 정확히 일치
   sideBar.style.height = displayH + 'px';
   sideBar.style.maxHeight = displayH + 'px';
   
   // PNG 저장/이미지 복사 버튼 폭 = 캔버스 wrapper + gap + 사이드바
-  // (사이드바 우측 라인까지 정확히 맞춤)
   if (actionButtons) {
     const totalW = displayW + gap + sideBarWidth;
     actionButtons.style.width = totalW + 'px';
