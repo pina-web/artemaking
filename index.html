@@ -4442,7 +4442,7 @@ saveHistory();
 drawCanvas();
 
 // 캔버스 wrapper와 사이드바를 화면에 맞게 조정
-// 핵심: PNG 저장/이미지 복사 버튼이 항상 화면에 보이도록 캔버스 영역 제한
+// 핵심: 모든 패널이 한 화면에 보이도록 강제 높이 제한
 function syncCanvasLayout() {
   const area = document.querySelector('.canvas-area');
   const wrapper = document.querySelector('.canvas-wrapper');
@@ -4451,6 +4451,7 @@ function syncCanvasLayout() {
   const previewHeader = document.querySelector('.panel.center .preview-header, .panel.center .preview-label');
   const footer = document.querySelector('.app-footer');
   const h1 = document.querySelector('h1');
+  const panels = document.querySelectorAll('.panel');
   if (!area || !wrapper || !sideBar) return;
   
   // 강제 크기 풀어 자연 area 측정
@@ -4462,33 +4463,42 @@ function syncCanvasLayout() {
   if (actionButtons) {
     actionButtons.style.width = '';
   }
+  panels.forEach(p => { p.style.maxHeight = ''; });
   
-  // 화면 전체 높이에서 잘리면 안되는 요소들 빼서 캔버스 영역 최대 높이 계산
+  // 화면 전체 높이에서 잘리면 안되는 요소들 빼서 영역 최대 높이 계산
   const viewportH = window.innerHeight;
   const h1H = h1 ? h1.offsetHeight : 40;
-  const previewH = previewHeader ? previewHeader.offsetHeight : 24;
-  const actionH = actionButtons ? actionButtons.offsetHeight : 50;
   const footerH = footer ? footer.offsetHeight : 60;
   const topLineH = 8;
-  const safetyMargin = 40;
+  const safetyMargin = 30;
   
-  // 캔버스가 사용할 수 있는 최대 안전 높이
-  const maxSafeH = viewportH - h1H - previewH - actionH - footerH - topLineH - safetyMargin;
+  // ★ 모든 panel의 최대 높이 (화면 전체 - 헤더 - 푸터 - 안전여유)
+  const maxPanelH = viewportH - h1H - footerH - topLineH - safetyMargin;
+  
+  // 모든 panel(left, center, right)에 max-height 강제
+  panels.forEach(p => {
+    p.style.maxHeight = maxPanelH + 'px';
+  });
+  
+  // 캔버스 영역의 최대 높이 (panel.center 안에서 미리보기 라벨, 액션 버튼 빼고)
+  const previewH = previewHeader ? previewHeader.offsetHeight : 24;
+  const actionH = actionButtons ? actionButtons.offsetHeight : 50;
+  const panelPadding = 24;  // panel.center 상하 padding 합
+  const maxCanvasAreaH = maxPanelH - previewH - actionH - panelPadding;
   
   // 가로 사용 가능 폭
   const areaRect = area.getBoundingClientRect();
-  const sideBarWidth = 100;  // CSS와 일치 (인덱스 형식 폭)
+  const sideBarWidth = 100;
   const gap = 5;
   const availW = areaRect.width - sideBarWidth - gap;
   
-  // 가로 폭이 너무 작으면 (초기 렌더링 시) 적용 안 함
   if (availW < 100) return;
   
   // 캔버스 비율 1088:889
   const canvasRatio = 1088 / 889;
   
-  // ★ 핵심: 캔버스 영역은 무조건 화면 안전 높이를 넘지 못하도록 제한
-  const availH = Math.min(Math.max(200, areaRect.height), maxSafeH);
+  // 캔버스 영역 사용 가능 높이
+  const availH = Math.max(200, maxCanvasAreaH);
   
   // 비율 fit 계산
   let displayW, displayH;
@@ -4508,14 +4518,14 @@ function syncCanvasLayout() {
   wrapper.style.height = displayH + 'px';
   wrapper.style.flex = 'none';
   
-  // canvas-area 자체도 max-height로 제한 (다른 요소들이 밀어내지 못하도록)
+  // canvas-area max-height
   area.style.maxHeight = displayH + 'px';
   
-  // 사이드바 높이를 캔버스와 정확히 일치
+  // 사이드바 높이
   sideBar.style.height = displayH + 'px';
   sideBar.style.maxHeight = displayH + 'px';
   
-  // PNG 저장/이미지 복사 버튼 폭 = 캔버스 wrapper + gap + 사이드바
+  // PNG 저장/이미지 복사 버튼 폭
   if (actionButtons) {
     const totalW = displayW + gap + sideBarWidth;
     actionButtons.style.width = totalW + 'px';
