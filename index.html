@@ -1529,20 +1529,47 @@
     }
     .message-textarea { min-height: 120px; }
     
-    /* 사이드바 도구를 가로로 배치 (모바일) */
+    /* 사이드바 도구를 6열 그리드로 배치 (모바일) - 12개 도구 = 2행 */
     .canvas-side-bar {
-      flex-direction: row !important;
-      flex-wrap: wrap;
+      display: grid !important;
+      grid-template-columns: repeat(6, 1fr) !important;
+      flex-direction: initial !important;
       width: 100% !important;
       gap: 4px !important;
       padding: 4px;
       order: 99; /* 캔버스 아래로 */
+      max-height: none !important;
+      overflow: visible !important;
+    }
+    .canvas-side-bar > * {
+      width: auto !important;
+      flex: initial !important;
+      height: auto !important;
+      min-height: 0 !important;
     }
     .canvas-side-bar .tool-btn,
     .canvas-side-bar .history-btn-v {
-      flex: 1 1 18%;
-      min-width: 60px;
+      flex-direction: column !important;
+      justify-content: center !important;
+      align-items: center !important;
+      gap: 2px !important;
       padding: 6px 2px !important;
+      min-width: 0 !important;
+      min-height: 52px !important;
+    }
+    .canvas-side-bar .tool-btn .icon,
+    .canvas-side-bar .history-btn-v .hbv-icon {
+      font-size: 20px !important;
+      line-height: 1 !important;
+    }
+    .canvas-side-bar .tool-btn span:not(.icon),
+    .canvas-side-bar .history-btn-v .hbv-label {
+      font-size: 10.5px !important;
+      line-height: 1.1 !important;
+      text-align: center !important;
+      white-space: nowrap !important;
+      overflow: visible !important;
+      width: auto !important;
     }
     .side-divider {
       display: none;
@@ -1562,10 +1589,19 @@
       overflow-y: visible;
       height: auto;
     }
+    /* 더 좁은 화면에서도 6열 유지하되 폰트 추가 축소 */
     .canvas-side-bar .tool-btn,
     .canvas-side-bar .history-btn-v {
-      flex: 1 1 22%;
-      min-width: 50px;
+      padding: 5px 1px !important;
+      min-height: 48px !important;
+    }
+    .canvas-side-bar .tool-btn .icon,
+    .canvas-side-bar .history-btn-v .hbv-icon {
+      font-size: 18px !important;
+    }
+    .canvas-side-bar .tool-btn span:not(.icon),
+    .canvas-side-bar .history-btn-v .hbv-label {
+      font-size: 9.5px !important;
     }
   }
 </style>
