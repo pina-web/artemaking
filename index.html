@@ -2011,11 +2011,28 @@ const floatingActions = document.getElementById('floatingActions');
 
 const CANVAS_W = 1088;
 const CANVAS_H = 889;
-const HEADER_H = 90;
-const IMAGE_AREA_Y = HEADER_H + 15;
-const IMAGE_AREA_H = CANVAS_H - IMAGE_AREA_Y - 15;
+const HEADER_H = 90;       // 제목 있을 때 헤더 영역
+const HEADER_H_EMPTY = 15; // 제목 없을 때 상단 여백
 const IMAGE_AREA_X = 15;
 const IMAGE_AREA_W = CANVAS_W - 30;
+
+// 동적 변수 - 제목 유무에 따라 갱신됨
+let IMAGE_AREA_Y = HEADER_H + 15;
+let IMAGE_AREA_H = CANVAS_H - IMAGE_AREA_Y - 15;
+let CURRENT_HEADER_H = HEADER_H;
+
+// 제목 유무에 따라 캔버스 영역 변수를 갱신
+function updateCanvasAreaForTitle() {
+  const hasTitle = titleInput && titleInput.value.trim().length > 0;
+  if (hasTitle) {
+    CURRENT_HEADER_H = HEADER_H;
+    IMAGE_AREA_Y = HEADER_H + 15;
+  } else {
+    CURRENT_HEADER_H = HEADER_H_EMPTY;
+    IMAGE_AREA_Y = HEADER_H_EMPTY;
+  }
+  IMAGE_AREA_H = CANVAS_H - IMAGE_AREA_Y - 15;
+}
 
 let currentColor = '#f5e056';
 let currentImage = null;  // 단일 모드(하위호환)
@@ -2027,7 +2044,9 @@ let imgState = {
   zoom: 1.0,
   offsetX: 0,
   offsetY: 0,
-  baseScale: 1.0
+  baseScale: 1.0,
+  rotation: 0,
+  filter: { brightness: 100, contrast: 100, saturation: 100, blur: 0 }
 };
 
 // 현재 도구
@@ -2252,7 +2271,7 @@ function processImageFiles(files) {
         newImages[index] = {
           img: img,
           fileName: file.name,
-          state: { zoom: 1.0, offsetX: 0, offsetY: 0, baseScale: 1.0 }
+          state: { zoom: 1.0, offsetX: 0, offsetY: 0, baseScale: 1.0, rotation: 0, filter: { brightness: 100, contrast: 100, saturation: 100, blur: 0 } }
         };
         loaded++;
         
@@ -2291,6 +2310,12 @@ function processImageFiles(files) {
     // 슬라이더는 활성 이미지 기준
     syncSlidersFromActiveImage();
     updateImageThumbs();
+    
+    // 이미지 도구 옵션 업데이트 (회전 UI 표시를 위해)
+    if (currentTool === 'image' && typeof updateToolOptions === 'function') {
+      updateToolOptions();
+    }
+    
     drawCanvas();
     
     // 이미지 업로드로 패널 내용이 변경되어 레이아웃 재계산 필요
@@ -2372,6 +2397,65 @@ function getActiveImageState() {
   if (activeImageIndex >= images.length) activeImageIndex = 0;
   return images[activeImageIndex].state;
 }
+
+// === 이미지 회전 ===
+// 현재 활성 이미지의 state 반환 (없으면 null)
+function getCurrentImageStateForRotation() {
+  if (images && images.length > 0) {
+    if (activeImageIndex >= images.length) activeImageIndex = 0;
+    return images[activeImageIndex].state;
+  }
+  if (currentImage && imgState) {
+    return imgState;
+  }
+  return null;
+}
+
+// 활성 이미지를 deg도 만큼 추가 회전 (양수: 시계방향, 음수: 반시계방향)
+window.rotateImage = function(deg) {
+  const state = getCurrentImageStateForRotation();
+  if (!state) {
+    showToast('회전할 이미지가 없습니다. 먼저 이미지를 업로드해주세요.');
+    return;
+  }
+  const cur = state.rotation || 0;
+  let next = cur + deg;
+  // -180 ~ 180 범위로 정리
+  next = ((next % 360) + 360) % 360;
+  if (next > 180) next -= 360;
+  state.rotation = next;
+  
+  // 입력 필드 업데이트
+  const rotInput = document.getElementById('rotationInput');
+  if (rotInput) rotInput.value = next;
+  
+  saveHistory();
+  drawCanvas();
+  showToast(`이미지 회전: ${next}°`);
+};
+
+// 활성 이미지의 회전 각도를 절대값으로 설정
+window.setImageRotation = function(deg) {
+  const state = getCurrentImageStateForRotation();
+  if (!state) return;
+  state.rotation = parseInt(deg) || 0;
+  drawCanvas();
+};
+
+// 회전 초기화
+window.resetRotation = function() {
+  const state = getCurrentImageStateForRotation();
+  if (!state) {
+    showToast('이미지가 없습니다');
+    return;
+  }
+  state.rotation = 0;
+  const rotInput = document.getElementById('rotationInput');
+  if (rotInput) rotInput.value = 0;
+  saveHistory();
+  drawCanvas();
+  showToast('회전 초기화');
+};
 
 // === 레이아웃 시스템 ===
 const CELL_GAP = 8;
@@ -2564,6 +2648,23 @@ window.selectActiveImage = function(index) {
   syncSlidersFromActiveImage();
   updateImageThumbs();
   drawCanvas();
+  // 활성 이미지 변경 시 회전 입력 필드도 업데이트
+  const rotInput = document.getElementById('rotationInput');
+  if (rotInput) {
+    const state = images.length > 0 ? images[activeImageIndex].state : imgState;
+    rotInput.value = state.rotation || 0;
+  }
+  // 활성 이미지 변경 시 보정 슬라이더도 그 이미지의 state.filter 값으로 동기화
+  const newState = images.length > 0 ? images[activeImageIndex].state : imgState;
+  if (newState && newState.filter) {
+    filterState.brightness = newState.filter.brightness;
+    filterState.contrast = newState.filter.contrast;
+    filterState.saturation = newState.filter.saturation;
+    filterState.blur = newState.filter.blur;
+    if (currentTool === 'filter' && typeof syncFilterSliders === 'function') {
+      syncFilterSliders();
+    }
+  }
 };
 
 window.removeImage = function(index) {
@@ -2768,7 +2869,44 @@ function updateToolOptions() {
   toolOptionsTitle.textContent = titles[currentTool];
 
   if (currentTool === 'image') {
-    toolOptionsBody.innerHTML = `<div class="help-text">💡 여러 이미지를 한 번에 업로드하면 자동으로 레이아웃이 적용됩니다. 각 이미지를 클릭하면 활성화되어 개별 조절 가능. 추가한 객체는 클릭으로 선택·이동, Delete로 삭제할 수 있습니다.</div>`;
+    const hasImages = images.length > 0 || currentImage;
+    const activeState = hasImages ? (images.length > 0 ? images[activeImageIndex].state : imgState) : null;
+    const curRotation = activeState ? (activeState.rotation || 0) : 0;
+    
+    toolOptionsBody.innerHTML = `
+      <div class="help-text">💡 여러 이미지를 한 번에 업로드하면 자동으로 레이아웃이 적용됩니다. 각 이미지를 클릭하면 활성화되어 개별 조절 가능. 추가한 객체는 클릭으로 선택·이동, Delete로 삭제할 수 있습니다.</div>
+      
+      ${hasImages ? `
+      <div style="border-top:1px solid #e5e7eb;margin-top:10px;padding-top:10px;">
+        <div style="font-size:11px;color:#555;font-weight:600;margin-bottom:6px;">🔄 이미지 회전</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px;">
+          <button class="preset-btn" onclick="rotateImage(-90)" title="왼쪽으로 90도 회전">↺ 왼쪽 90°</button>
+          <button class="preset-btn" onclick="rotateImage(90)" title="오른쪽으로 90도 회전">↻ 오른쪽 90°</button>
+        </div>
+        <div class="slider-row" style="margin-top:4px;">
+          <label>각도</label>
+          <input type="number" id="rotationInput" min="-360" max="360" step="1" value="${curRotation}" style="width:70px;padding:4px 6px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+          <span style="font-size:11px;color:#888;">°</span>
+          <button class="preset-btn" onclick="resetRotation()" style="margin-left:auto;padding:4px 10px;font-size:11px;">초기화</button>
+        </div>
+        <div style="font-size:10px;color:#888;margin-top:4px;line-height:1.4;">
+          💡 숫자를 직접 입력하거나 ↺ ↻ 버튼으로 90도씩 회전. 양수는 시계방향, 음수는 반시계방향.
+        </div>
+      </div>
+      ` : ''}
+    `;
+    
+    // 회전 입력 이벤트
+    const rotInput = document.getElementById('rotationInput');
+    if (rotInput) {
+      rotInput.addEventListener('input', e => {
+        let val = parseInt(e.target.value) || 0;
+        setImageRotation(val);
+      });
+      rotInput.addEventListener('change', () => {
+        saveHistory();
+      });
+    }
   } else if (currentTool === 'draw') {
     toolOptionsBody.innerHTML = `
       <div class="color-row">
@@ -3386,8 +3524,15 @@ function updateToolOptions() {
       document.getElementById('mosaicSizeVal').textContent = mosaicState.blockSize + 'px';
     });
   } else if (currentTool === 'filter') {
+    // 활성 이미지의 filter 상태 가져오기 (없으면 기본값)
+    const actState = getCurrentImageStateForRotation();
+    if (actState && !actState.filter) {
+      actState.filter = { brightness: 100, contrast: 100, saturation: 100, blur: 0 };
+    }
+    const f = actState ? actState.filter : { brightness: 100, contrast: 100, saturation: 100, blur: 0 };
+    
     toolOptionsBody.innerHTML = `
-      <div class="help-text" style="margin-bottom:8px;">📷 활성 이미지에 보정을 적용합니다.</div>
+      <div class="help-text" style="margin-bottom:8px;">📷 활성 이미지에 보정을 적용합니다. 다른 도구로 전환해도 보정값이 유지됩니다.</div>
       
       <div style="font-size:11px;color:#555;font-weight:600;margin-bottom:5px;">⚡ 빠른 프리셋</div>
       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:5px;margin-bottom:10px;">
@@ -3400,37 +3545,48 @@ function updateToolOptions() {
       <div style="font-size:11px;color:#555;font-weight:600;margin-bottom:5px;">🎚️ 수동 조절</div>
       <div class="slider-row">
         <label>밝기</label>
-        <input type="range" id="fBrightness" min="0" max="200" value="${filterState.brightness}">
-        <span class="value-display" id="fBrightnessVal">${filterState.brightness}%</span>
+        <input type="range" id="fBrightness" min="0" max="200" value="${f.brightness}">
+        <span class="value-display" id="fBrightnessVal">${f.brightness}%</span>
       </div>
       <div class="slider-row">
         <label>대비</label>
-        <input type="range" id="fContrast" min="0" max="200" value="${filterState.contrast}">
-        <span class="value-display" id="fContrastVal">${filterState.contrast}%</span>
+        <input type="range" id="fContrast" min="0" max="200" value="${f.contrast}">
+        <span class="value-display" id="fContrastVal">${f.contrast}%</span>
       </div>
       <div class="slider-row">
         <label>채도</label>
-        <input type="range" id="fSaturation" min="0" max="200" value="${filterState.saturation}">
-        <span class="value-display" id="fSaturationVal">${filterState.saturation}%</span>
+        <input type="range" id="fSaturation" min="0" max="200" value="${f.saturation}">
+        <span class="value-display" id="fSaturationVal">${f.saturation}%</span>
       </div>
       <div class="slider-row">
         <label>흐림(가우시안)</label>
-        <input type="range" id="fBlur" min="0" max="20" value="${filterState.blur}">
-        <span class="value-display" id="fBlurVal">${filterState.blur}px</span>
+        <input type="range" id="fBlur" min="0" max="20" value="${f.blur}">
+        <span class="value-display" id="fBlurVal">${f.blur}px</span>
       </div>
       <div style="display:flex;gap:5px;margin-top:8px;">
         <button class="action-btn" style="flex:1;padding:8px;font-size:11px;background:#666;" onclick="resetFilter()">↺ 원본으로</button>
-        <button class="action-btn" style="flex:1;padding:8px;font-size:11px;" onclick="applyFilter()">✓ 적용</button>
       </div>
-      <div class="help-text" style="margin-top:6px;">100%가 원본, 좌우로 움직여 조절. <b>적용</b> 버튼을 누르면 이미지에 영구 적용됩니다.</div>
+      <div class="help-text" style="margin-top:6px;">100%가 원본, 좌우로 움직여 조절. 다른 도구로 전환해도 보정 효과는 유지됩니다.</div>
     `;
     ['fBrightness', 'fContrast', 'fSaturation', 'fBlur'].forEach(id => {
       document.getElementById(id).addEventListener('input', e => {
         const map = {fBrightness:'brightness', fContrast:'contrast', fSaturation:'saturation', fBlur:'blur'};
         const unit = id === 'fBlur' ? 'px' : '%';
-        filterState[map[id]] = parseInt(e.target.value);
+        const val = parseInt(e.target.value);
+        // 전역 filterState도 업데이트 (호환성)
+        filterState[map[id]] = val;
+        // 활성 이미지의 state.filter에 직접 저장 (영구)
+        const st = getCurrentImageStateForRotation();
+        if (st) {
+          if (!st.filter) st.filter = { brightness: 100, contrast: 100, saturation: 100, blur: 0 };
+          st.filter[map[id]] = val;
+        }
         document.getElementById(id + 'Val').textContent = e.target.value + unit;
         drawCanvas();
+      });
+      // 슬라이더 놓을 때 history 저장
+      document.getElementById(id).addEventListener('change', () => {
+        saveHistory();
       });
     });
   } else if (currentTool === 'stamp') {
@@ -3844,6 +4000,11 @@ window.resetFilter = function() {
   filterState.contrast = 100;
   filterState.saturation = 100;
   filterState.blur = 0;
+  // 활성 이미지의 state.filter도 초기화
+  const st = getCurrentImageStateForRotation();
+  if (st) {
+    st.filter = { brightness: 100, contrast: 100, saturation: 100, blur: 0 };
+  }
   ['fBrightness', 'fContrast', 'fSaturation', 'fBlur'].forEach(id => {
     const e = document.getElementById(id);
     if (e) {
@@ -3853,6 +4014,7 @@ window.resetFilter = function() {
       document.getElementById(id + 'Val').textContent = def + unit;
     }
   });
+  saveHistory();
   drawCanvas();
 };
 
@@ -3944,7 +4106,19 @@ window.applyPreset = function(type) {
     filterState.blur = 0;
   }
   
+  // 활성 이미지의 state.filter에도 동기화 (영구 저장)
+  const st = getCurrentImageStateForRotation();
+  if (st) {
+    st.filter = {
+      brightness: filterState.brightness,
+      contrast: filterState.contrast,
+      saturation: filterState.saturation,
+      blur: filterState.blur
+    };
+  }
+  
   syncFilterSliders();
+  saveHistory();
   drawCanvas();
 };
 
@@ -4485,18 +4659,21 @@ document.addEventListener('mousedown', (e) => {
 
 // === 캔버스 그리기 ===
 function drawCanvas() {
+  // 제목 유무에 따라 캔버스 영역 변수 갱신 (이미지 영역이 위로 확장됨)
+  updateCanvasAreaForTitle();
+  
   // 흰색 배경
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  // 제목 - 입력값 없으면 공란
-  const title = titleInput.value;
+  // 제목 - 입력값 없으면 헤더 영역 자체가 사라짐
+  const title = titleInput.value.trim();
   if (title) {
     ctx.fillStyle = '#1a1a1a';
     ctx.font = 'bold 30px "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(title, CANVAS_W / 2, HEADER_H / 2);
+    ctx.fillText(title, CANVAS_W / 2, CURRENT_HEADER_H / 2);
   }
 
   // 이미지 영역
@@ -4586,6 +4763,12 @@ function drawTransformedImage() {
   const centerY = IMAGE_AREA_Y + IMAGE_AREA_H / 2;
   const drawX = centerX - drawW / 2 + imgState.offsetX;
   const drawY = centerY - drawH / 2 + imgState.offsetY;
+  const rotation = imgState.rotation || 0;
+  
+  // 영구 저장된 filter 적용
+  const stFilter = imgState.filter || { brightness: 100, contrast: 100, saturation: 100, blur: 0 };
+  const hasFilter = (stFilter.brightness !== 100 || stFilter.contrast !== 100 || 
+                     stFilter.saturation !== 100 || stFilter.blur !== 0);
 
   ctx.save();
   ctx.beginPath();
@@ -4593,7 +4776,22 @@ function drawTransformedImage() {
   ctx.clip();
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(IMAGE_AREA_X, IMAGE_AREA_Y, IMAGE_AREA_W, IMAGE_AREA_H);
-  ctx.drawImage(img, drawX, drawY, drawW, drawH);
+  
+  if (hasFilter) {
+    ctx.filter = `brightness(${stFilter.brightness}%) contrast(${stFilter.contrast}%) saturate(${stFilter.saturation}%) blur(${stFilter.blur}px)`;
+  }
+  
+  if (rotation !== 0) {
+    const imgCenterX = drawX + drawW / 2;
+    const imgCenterY = drawY + drawH / 2;
+    ctx.translate(imgCenterX, imgCenterY);
+    ctx.rotate(rotation * Math.PI / 180);
+    ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+  } else {
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+  }
+  
+  if (hasFilter) ctx.filter = 'none';
   ctx.restore();
 }
 
@@ -4626,17 +4824,26 @@ function drawAllImages() {
     const centerY = cell.y + cell.h / 2;
     const drawX = centerX - drawW / 2 + st.offsetX;
     const drawY = centerY - drawH / 2 + st.offsetY;
+    const rotation = st.rotation || 0;
     
-    // 필터 도구 활성 시 활성 이미지에 미리보기 필터 적용
-    const isActive = (i === activeImageIndex);
-    const filterApplied = (currentTool === 'filter' && isActive && 
-      (filterState.brightness !== 100 || filterState.contrast !== 100 || 
-       filterState.saturation !== 100 || filterState.blur !== 0));
-    if (filterApplied) {
-      ctx.filter = getFilterCSS();
+    // 활성 이미지에 영구 저장된 filter 적용 (도구와 무관하게 항상 유지)
+    const stFilter = st.filter || { brightness: 100, contrast: 100, saturation: 100, blur: 0 };
+    const hasFilter = (stFilter.brightness !== 100 || stFilter.contrast !== 100 || 
+                       stFilter.saturation !== 100 || stFilter.blur !== 0);
+    if (hasFilter) {
+      ctx.filter = `brightness(${stFilter.brightness}%) contrast(${stFilter.contrast}%) saturate(${stFilter.saturation}%) blur(${stFilter.blur}px)`;
     }
-    ctx.drawImage(img, drawX, drawY, drawW, drawH);
-    if (filterApplied) ctx.filter = 'none';
+    
+    if (rotation !== 0) {
+      const imgCenterX = drawX + drawW / 2;
+      const imgCenterY = drawY + drawH / 2;
+      ctx.translate(imgCenterX, imgCenterY);
+      ctx.rotate(rotation * Math.PI / 180);
+      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+    } else {
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    }
+    if (hasFilter) ctx.filter = 'none';
     
     ctx.restore();
     
@@ -4850,171 +5057,279 @@ function drawStampObject(obj) {
 }
 
 // 말풍선 그리기
+// 말풍선 그리기 - 본체 + 꼬리를 각각 별도 path로 그려서 단순화
 function drawBubble(obj) {
   const x = Math.min(obj.x1, obj.x2);
   const y = Math.min(obj.y1, obj.y2);
   const w = Math.abs(obj.x2 - obj.x1);
   const h = Math.abs(obj.y2 - obj.y1);
+  if (w < 5 || h < 5) return;
   
   ctx.save();
   ctx.fillStyle = obj.bgColor;
   ctx.strokeStyle = obj.borderColor;
   ctx.lineWidth = obj.borderWidth;
   ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
   
+  // 1) 본체 모양 그리기
   ctx.beginPath();
   if (obj.shape === 'round') {
     const r = Math.min(20, w / 4, h / 4);
-    bubblePathRound(ctx, x, y, w, h, r, obj.tailDirection);
+    roundedRectPath(ctx, x, y, w, h, r);
   } else if (obj.shape === 'rect') {
-    bubblePathRect(ctx, x, y, w, h, obj.tailDirection);
+    ctx.rect(x, y, w, h);
   } else if (obj.shape === 'oval') {
-    bubblePathOval(ctx, x, y, w, h, obj.tailDirection);
+    ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
   } else if (obj.shape === 'cloud') {
-    bubblePathCloud(ctx, x, y, w, h, obj.tailDirection);
+    cloudPath(ctx, x, y, w, h);
   }
   ctx.fill();
-  if (obj.borderWidth > 0) ctx.stroke();
+  ctx.stroke();
   
+  // 2) 꼬리 그리기 (본체와 별도 path로 - 본체와 자연스럽게 이어지도록 fill 후 stroke)
+  if (obj.tailDirection && obj.tailDirection !== 'none') {
+    drawBubbleTail(ctx, x, y, w, h, obj.tailDirection, obj.shape, obj.bgColor, obj.borderColor, obj.borderWidth);
+  }
+  
+  // 텍스트 그리기
   if (obj.text) {
-    const weight = obj.bold ? 'bold ' : '';
-    ctx.font = `${weight}${obj.textSize}px "Malgun Gothic", "Apple SD Gothic Neo", sans-serif`;
-    ctx.fillStyle = obj.textColor;
+    ctx.fillStyle = obj.textColor || '#000000';
+    ctx.font = `${obj.textSize || 16}px ${getTextFontFamily(obj.textFont) || '"Malgun Gothic", sans-serif'}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const lines = obj.text.split('\n');
-    const lineH = obj.textSize * 1.2;
-    const totalH = lines.length * lineH;
-    const startY = y + h / 2 - totalH / 2 + lineH / 2;
+    const lineHeight = (obj.textSize || 16) * 1.3;
+    const startY = y + h / 2 - (lines.length - 1) * lineHeight / 2;
     lines.forEach((line, i) => {
-      ctx.fillText(line, x + w / 2, startY + i * lineH);
+      ctx.fillText(line, x + w / 2, startY + i * lineHeight);
     });
   }
+  
   ctx.restore();
 }
 
-function bubblePathRound(ctx, x, y, w, h, r, tail) {
-  const tailW = Math.min(20, w * 0.15);
-  const tailH = Math.min(20, h * 0.2);
-  
+// 둥근 사각형 경로
+function roundedRectPath(ctx, x, y, w, h, r) {
+  if (r > w / 2) r = w / 2;
+  if (r > h / 2) r = h / 2;
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
   ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  
-  if (tail === 'topRight') {
-    ctx.lineTo(x + w, y - tailH);
-    ctx.lineTo(x + w - tailW, y + r + 2);
-  }
   ctx.lineTo(x + w, y + h - r);
   ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  
-  if (tail === 'bottomRight') {
-    ctx.lineTo(x + w - tailW, y + h);
-    ctx.lineTo(x + w - tailW * 0.3, y + h + tailH);
-    ctx.lineTo(x + w - tailW * 2, y + h);
-  }
   ctx.lineTo(x + r, y + h);
-  
-  if (tail === 'bottomLeft') {
-    ctx.lineTo(x + tailW * 2, y + h);
-    ctx.lineTo(x + tailW * 0.3, y + h + tailH);
-    ctx.lineTo(x + tailW, y + h);
-  }
   ctx.quadraticCurveTo(x, y + h, x, y + h - r);
   ctx.lineTo(x, y + r);
-  
-  if (tail === 'topLeft') {
-    ctx.lineTo(x + tailW, y + r + 2);
-    ctx.lineTo(x, y - tailH);
-  }
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
 }
 
-function bubblePathRect(ctx, x, y, w, h, tail) {
-  const tailW = Math.min(20, w * 0.15);
-  const tailH = Math.min(20, h * 0.2);
-  
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + w, y);
-  ctx.lineTo(x + w, y + h);
-  
-  if (tail === 'bottomRight') {
-    ctx.lineTo(x + w - tailW, y + h);
-    ctx.lineTo(x + w - tailW * 0.3, y + h + tailH);
-    ctx.lineTo(x + w - tailW * 2, y + h);
-  }
-  ctx.lineTo(x, y + h);
-  
-  if (tail === 'bottomLeft') {
-    ctx.lineTo(x + tailW * 2, y + h);
-    ctx.lineTo(x + tailW * 0.3, y + h + tailH);
-    ctx.lineTo(x + tailW, y + h);
-  }
-  ctx.lineTo(x, y);
-  ctx.closePath();
-}
-
-function bubblePathOval(ctx, x, y, w, h, tail) {
-  ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
-  if (tail !== 'none') {
-    const tailH = Math.min(20, h * 0.25);
-    let tx, ty, tx2, ty2, tx3, ty3;
-    if (tail === 'bottomLeft') {
-      tx = x + w * 0.25; ty = y + h - 2;
-      tx2 = x + w * 0.15; ty2 = y + h + tailH;
-      tx3 = x + w * 0.4; ty3 = y + h - 2;
-    } else if (tail === 'bottomRight') {
-      tx = x + w * 0.6; ty = y + h - 2;
-      tx2 = x + w * 0.85; ty2 = y + h + tailH;
-      tx3 = x + w * 0.75; ty3 = y + h - 2;
-    } else if (tail === 'topLeft') {
-      tx = x + w * 0.4; ty = y + 2;
-      tx2 = x + w * 0.15; ty2 = y - tailH;
-      tx3 = x + w * 0.25; ty3 = y + 2;
-    } else if (tail === 'topRight') {
-      tx = x + w * 0.75; ty = y + 2;
-      tx2 = x + w * 0.85; ty2 = y - tailH;
-      tx3 = x + w * 0.6; ty3 = y + 2;
-    }
-    ctx.moveTo(tx, ty);
-    ctx.lineTo(tx2, ty2);
-    ctx.lineTo(tx3, ty3);
-  }
-}
-
-function bubblePathCloud(ctx, x, y, w, h, tail) {
+// 구름 모양 경로 (생각풍선)
+function cloudPath(ctx, x, y, w, h) {
   const cx = x + w / 2, cy = y + h / 2;
-  const numBumps = 10;
-  const r = Math.min(w, h) * 0.18;
+  const numBumps = 12;
+  const bumpR = Math.min(w, h) * 0.15;
+  const radiusX = w / 2 - bumpR * 0.5;
+  const radiusY = h / 2 - bumpR * 0.5;
   
-  ctx.moveTo(cx + (w / 2 - r) * Math.cos(0) + r, cy + (h / 2 - r) * Math.sin(0));
+  // 첫 점으로 이동
+  const a0 = 0;
+  const startX = cx + Math.cos(a0) * radiusX + bumpR;
+  const startY = cy + Math.sin(a0) * radiusY;
+  ctx.moveTo(startX, startY);
+  
+  // 둥근 돌기들 그리기
   for (let i = 0; i < numBumps; i++) {
     const angle = (i / numBumps) * Math.PI * 2;
-    const bumpX = cx + Math.cos(angle) * (w / 2 - r);
-    const bumpY = cy + Math.sin(angle) * (h / 2 - r);
-    ctx.arc(bumpX, bumpY, r, angle - Math.PI / 2, angle + Math.PI * 2 / numBumps - Math.PI / 2 + 0.4);
+    const bumpX = cx + Math.cos(angle) * radiusX;
+    const bumpY = cy + Math.sin(angle) * radiusY;
+    ctx.arc(bumpX, bumpY, bumpR, angle - 0.3, angle + Math.PI * 2 / numBumps + 0.3);
   }
   ctx.closePath();
+}
+
+// 꼬리 그리기 - 본체 위에 같은 색으로 자연스럽게 합쳐짐
+function drawBubbleTail(ctx, x, y, w, h, direction, shape, bgColor, borderColor, borderWidth) {
+  // 꼬리 크기 (말풍선 크기에 비례, 최소/최대 제한)
+  const tailSize = Math.max(15, Math.min(35, Math.min(w, h) * 0.18));
+  const tailWidth = tailSize * 0.7;
   
-  if (tail !== 'none') {
-    let cx2, cy2, cx3, cy3;
-    if (tail === 'bottomLeft') {
-      cx2 = x + w * 0.2; cy2 = y + h + 8;
-      cx3 = x + w * 0.1; cy3 = y + h + 22;
-    } else if (tail === 'bottomRight') {
-      cx2 = x + w * 0.8; cy2 = y + h + 8;
-      cx3 = x + w * 0.9; cy3 = y + h + 22;
-    } else if (tail === 'topLeft') {
-      cx2 = x + w * 0.2; cy2 = y - 8;
-      cx3 = x + w * 0.1; cy3 = y - 22;
+  // 본체 중심
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  
+  // 꼬리 방향에 따른 기준점 (본체 가장자리)
+  let baseX, baseY, tipX, tipY, sideOffsetX, sideOffsetY;
+  
+  // shape이 oval/cloud인 경우는 가장자리를 따라 계산
+  const isCurved = (shape === 'oval' || shape === 'cloud');
+  
+  if (direction === 'bottomLeft') {
+    // 본체 하단 좌측 영역에서 시작해 좌하단으로 내려감
+    if (isCurved) {
+      // 타원 좌하단 지점
+      const angle = Math.PI * 0.7; // 좌하단 방향
+      baseX = cx + Math.cos(angle) * (w / 2 - 2);
+      baseY = cy + Math.sin(angle) * (h / 2 - 2);
     } else {
-      cx2 = x + w * 0.8; cy2 = y - 8;
-      cx3 = x + w * 0.9; cy3 = y - 22;
+      baseX = x + w * 0.25;
+      baseY = y + h;
     }
-    ctx.moveTo(cx2 + 6, cy2); ctx.arc(cx2, cy2, 6, 0, Math.PI * 2);
-    ctx.moveTo(cx3 + 4, cy3); ctx.arc(cx3, cy3, 4, 0, Math.PI * 2);
+    tipX = baseX - tailSize * 0.5;
+    tipY = baseY + tailSize;
+    sideOffsetX = tailWidth * 0.5;
+    sideOffsetY = -tailWidth * 0.3;
+  } else if (direction === 'bottomRight') {
+    if (isCurved) {
+      const angle = Math.PI * 0.3;
+      baseX = cx + Math.cos(angle) * (w / 2 - 2);
+      baseY = cy + Math.sin(angle) * (h / 2 - 2);
+    } else {
+      baseX = x + w * 0.75;
+      baseY = y + h;
+    }
+    tipX = baseX + tailSize * 0.5;
+    tipY = baseY + tailSize;
+    sideOffsetX = -tailWidth * 0.5;
+    sideOffsetY = -tailWidth * 0.3;
+  } else if (direction === 'topLeft') {
+    if (isCurved) {
+      const angle = -Math.PI * 0.7;
+      baseX = cx + Math.cos(angle) * (w / 2 - 2);
+      baseY = cy + Math.sin(angle) * (h / 2 - 2);
+    } else {
+      baseX = x + w * 0.25;
+      baseY = y;
+    }
+    tipX = baseX - tailSize * 0.5;
+    tipY = baseY - tailSize;
+    sideOffsetX = tailWidth * 0.5;
+    sideOffsetY = tailWidth * 0.3;
+  } else if (direction === 'topRight') {
+    if (isCurved) {
+      const angle = -Math.PI * 0.3;
+      baseX = cx + Math.cos(angle) * (w / 2 - 2);
+      baseY = cy + Math.sin(angle) * (h / 2 - 2);
+    } else {
+      baseX = x + w * 0.75;
+      baseY = y;
+    }
+    tipX = baseX + tailSize * 0.5;
+    tipY = baseY - tailSize;
+    sideOffsetX = -tailWidth * 0.5;
+    sideOffsetY = tailWidth * 0.3;
+  } else {
+    return;
   }
+  
+  // 구름 모양은 동그라미 꼬리 (생각풍선 스타일)
+  if (shape === 'cloud') {
+    // 본체에서 멀어지는 방향의 두 개 동그라미
+    const dx = tipX - baseX;
+    const dy = tipY - baseY;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1) return;
+    const nx = dx / len;
+    const ny = dy / len;
+    
+    const circle1X = baseX + nx * tailSize * 0.5;
+    const circle1Y = baseY + ny * tailSize * 0.5;
+    const circle1R = tailSize * 0.22;
+    
+    const circle2X = baseX + nx * tailSize * 0.95;
+    const circle2Y = baseY + ny * tailSize * 0.95;
+    const circle2R = tailSize * 0.15;
+    
+    // 큰 동그라미
+    ctx.beginPath();
+    ctx.arc(circle1X, circle1Y, circle1R, 0, Math.PI * 2);
+    ctx.fillStyle = bgColor;
+    ctx.fill();
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = borderWidth;
+    ctx.stroke();
+    
+    // 작은 동그라미
+    ctx.beginPath();
+    ctx.arc(circle2X, circle2Y, circle2R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    return;
+  }
+  
+  // 일반 삼각형 꼬리 (rect, round, oval)
+  // 꼬리 베이스의 두 점 (본체 가장자리에 살짝 걸치도록)
+  const base1X = baseX - sideOffsetX;
+  const base1Y = baseY - sideOffsetY;
+  const base2X = baseX + sideOffsetX;
+  const base2Y = baseY + sideOffsetY;
+  
+  // 1단계: 꼬리 채우기 (테두리 포함)
+  ctx.beginPath();
+  ctx.moveTo(base1X, base1Y);
+  ctx.lineTo(tipX, tipY);
+  ctx.lineTo(base2X, base2Y);
+  ctx.closePath();
+  ctx.fillStyle = bgColor;
+  ctx.fill();
+  
+  // 2단계: 꼬리 외곽선만 (베이스 변은 본체와 겹쳐서 제외)
+  ctx.beginPath();
+  ctx.moveTo(base1X, base1Y);
+  ctx.lineTo(tipX, tipY);
+  ctx.lineTo(base2X, base2Y);
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = borderWidth;
+  ctx.stroke();
+  
+  // 3단계: 본체와 꼬리가 만나는 부분을 본체 색으로 가려 깔끔하게
+  ctx.save();
+  ctx.beginPath();
+  if (shape === 'round') {
+    const r = Math.min(20, w / 4, h / 4);
+    roundedRectPath(ctx, x, y, w, h, r);
+  } else if (shape === 'rect') {
+    ctx.rect(x, y, w, h);
+  } else if (shape === 'oval') {
+    ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+  }
+  ctx.clip();
+  // 본체 영역만 다시 그려서 꼬리 베이스 선을 가림
+  ctx.beginPath();
+  ctx.moveTo(base1X, base1Y);
+  ctx.lineTo(base2X, base2Y);
+  ctx.strokeStyle = bgColor;
+  ctx.lineWidth = borderWidth + 1;
+  ctx.stroke();
+  ctx.restore();
+  
+  // 4단계: 본체 외곽선 다시 그려서 본체 라인이 깔끔하게
+  ctx.beginPath();
+  if (shape === 'round') {
+    const r = Math.min(20, w / 4, h / 4);
+    roundedRectPath(ctx, x, y, w, h, r);
+  } else if (shape === 'rect') {
+    ctx.rect(x, y, w, h);
+  } else if (shape === 'oval') {
+    ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+  }
+  // 본체 외곽선을 다시 그리되, 꼬리 베이스 영역만 살짝 잘라냄
+  ctx.save();
+  // 꼬리 베이스 영역 클립 마스크 만들기
+  ctx.beginPath();
+  if (shape === 'round') {
+    const r = Math.min(20, w / 4, h / 4);
+    roundedRectPath(ctx, x, y, w, h, r);
+  } else if (shape === 'rect') {
+    ctx.rect(x, y, w, h);
+  } else if (shape === 'oval') {
+    ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+  }
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = borderWidth;
+  ctx.stroke();
+  ctx.restore();
 }
 
 // 객체의 경계 박스 계산
@@ -5494,9 +5809,15 @@ canvas.addEventListener('mousedown', (e) => {
   }
 
   // 1) 먼저 클릭한 위치에 객체가 있는지 확인 (이동/선택 우선)
-  // 단, 그리기/도형/지우개/말풍선/모자이크 도구는 자유롭게 그릴 수 있어야 하므로 객체 검사 스킵
-  if (currentTool !== 'draw' && currentTool !== 'shape' && currentTool !== 'erase' && currentTool !== 'bubble' && currentTool !== 'mosaic') {
-    const hit = findObjectAt(pt.x, pt.y);
+  // 단, 그리기/도형/지우개/모자이크 도구는 자유롭게 그릴 수 있어야 하므로 객체 검사 스킵
+  // bubble 도구는 기존 말풍선 위를 클릭하면 선택, 빈 곳을 클릭하면 새로 그리기
+  const isBubbleTool = currentTool === 'bubble';
+  if (currentTool !== 'draw' && currentTool !== 'shape' && currentTool !== 'erase' && currentTool !== 'mosaic') {
+    let hit = findObjectAt(pt.x, pt.y);
+    // bubble 도구일 때는 말풍선 객체만 hit으로 인정 (다른 객체는 무시하고 새로 그릴 수 있도록)
+    if (isBubbleTool && hit && hit.type !== 'bubble') {
+      hit = null;
+    }
     if (hit) {
       // ★ 이미 선택된 텍스트/말풍선을 다시 클릭한 경우:
       //   - 마우스를 움직이지 않고 떼면 → 편집 모드 (mouseup에서 처리)
