@@ -1651,6 +1651,8 @@
         <div class="section-title">🖼️ 배경 이미지</div>
         <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📷 이미지 업로드 (다중 가능)</button>
         <input type="file" id="fileInput" accept="image/*" multiple>
+        <button class="upload-btn" style="margin-top:6px;background:#10b981;" onclick="pasteFromClipboard()">📋 클립보드 이미지 붙여넣기</button>
+        <div style="font-size:10px;color:#888;margin-top:4px;line-height:1.4;">💡 화면 캡처 후 이 버튼을 누르거나, 캔버스에서 <b>Ctrl+V</b>로 붙여넣을 수 있습니다.</div>
         <div id="fileName" class="file-name">이미지를 선택해주세요</div>
       </div>
 
@@ -2385,6 +2387,67 @@ if (canvasWrapper) {
     }
   });
 }
+
+// === 클립보드 이미지 붙여넣기 (Ctrl+V) ===
+// 외부에서 캡처한 이미지를 클립보드에서 바로 불러오기
+document.addEventListener('paste', (e) => {
+  // 텍스트 입력 중(메시지창, 제목 등)에는 일반 붙여넣기 동작 유지
+  const activeEl = document.activeElement;
+  const isTextInput = activeEl && (
+    activeEl.tagName === 'INPUT' && activeEl.type === 'text' ||
+    activeEl.tagName === 'TEXTAREA'
+  );
+  
+  const clipboardData = e.clipboardData || window.clipboardData;
+  if (!clipboardData) return;
+  
+  // 클립보드에서 이미지 항목 찾기
+  const items = clipboardData.items;
+  let imageFile = null;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') !== -1) {
+      imageFile = items[i].getAsFile();
+      break;
+    }
+  }
+  
+  if (imageFile) {
+    // 이미지가 클립보드에 있으면 텍스트 입력 중이어도 이미지로 처리
+    e.preventDefault();
+    processImageFiles([imageFile]);
+    showToast('✓ 클립보드 이미지를 불러왔습니다');
+  }
+  // 이미지가 없으면 기본 동작(텍스트 붙여넣기) 유지
+});
+
+// 클립보드 이미지 불러오기 버튼 핸들러 (Clipboard API 사용)
+window.pasteFromClipboard = async function() {
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+      showToast('이 브라우저는 클립보드 읽기를 지원하지 않습니다. Ctrl+V를 사용해주세요.');
+      return;
+    }
+    const clipboardItems = await navigator.clipboard.read();
+    let found = false;
+    for (const item of clipboardItems) {
+      const imageType = item.types.find(t => t.startsWith('image/'));
+      if (imageType) {
+        const blob = await item.getType(imageType);
+        const file = new File([blob], 'clipboard-image.png', { type: imageType });
+        processImageFiles([file]);
+        showToast('✓ 클립보드 이미지를 불러왔습니다');
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      showToast('클립보드에 이미지가 없습니다. 먼저 이미지를 캡처해주세요.');
+    }
+  } catch (err) {
+    console.error('클립보드 읽기 실패:', err);
+    showToast('클립보드 접근 실패. Ctrl+V로 직접 붙여넣어 주세요.');
+  }
+};
 
 function updateFileNameDisplay() {
   if (images.length === 0) fileName.textContent = '이미지를 선택해주세요';
@@ -4690,11 +4753,12 @@ function drawCanvas() {
     ctx.strokeRect(IMAGE_AREA_X, IMAGE_AREA_Y, IMAGE_AREA_W, IMAGE_AREA_H);
     ctx.setLineDash([]);
     ctx.fillStyle = '#bbb';
-    ctx.font = '28px "Malgun Gothic", sans-serif';
+    ctx.font = '26px "Malgun Gothic", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('좌측 이미지 업로드 기능을 누르거나', CANVAS_W / 2, CANVAS_H / 2 - 20);
-    ctx.fillText('이미지를 직접 드롭다운할 수 있습니다', CANVAS_W / 2, CANVAS_H / 2 + 20);
+    ctx.fillText('좌측 이미지 업로드 기능을 누르거나', CANVAS_W / 2, CANVAS_H / 2 - 32);
+    ctx.fillText('이미지를 직접 드롭다운할 수 있습니다', CANVAS_W / 2, CANVAS_H / 2);
+    ctx.fillText('또는 Ctrl+V로 캡처 이미지를 붙여넣으세요', CANVAS_W / 2, CANVAS_H / 2 + 32);
   }
 
   // 객체 (그리기 패스, 텍스트, 이모티콘, 도형) 그리기
