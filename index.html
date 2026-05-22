@@ -67,22 +67,35 @@
     flex-wrap: wrap;
   }
   .app-header h1 { margin: 12px 0 6px 0; }
+  /* 헤더 버튼 그룹 - 우측 상단 배치, 세로 정렬 */
+  .header-btn-group {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+  }
   .download-editor-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 7px 14px;
+    justify-content: center;
+    gap: 5px;
+    padding: 6px 10px;
     background: linear-gradient(135deg, #10b981, #059669);
     color: white;
     border: none;
-    border-radius: 7px;
-    font-size: 12px;
+    border-radius: 6px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     font-family: inherit;
     box-shadow: 0 2px 6px rgba(16,185,129,0.25);
     transition: all 0.15s;
     white-space: nowrap;
+    width: 100%;
   }
   .download-editor-btn:hover {
     background: linear-gradient(135deg, #059669, #047857);
@@ -102,19 +115,21 @@
   .switch-mode-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 7px 14px;
+    justify-content: center;
+    gap: 5px;
+    padding: 6px 10px;
     background: linear-gradient(135deg, #4a90e2, #2c70c0);
     color: white;
     border: none;
-    border-radius: 7px;
-    font-size: 12px;
+    border-radius: 6px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     font-family: inherit;
     box-shadow: 0 2px 6px rgba(74,144,226,0.25);
     transition: all 0.15s;
     white-space: nowrap;
+    width: 100%;
   }
   .switch-mode-btn:hover {
     background: linear-gradient(135deg, #2c70c0, #1c5aa0);
@@ -156,11 +171,16 @@
   }
   .back-to-consulting-btn:active { transform: translateY(0); }
   @media (max-width: 600px) {
-    .app-header { gap: 6px; }
-    .download-editor-btn { padding: 6px 10px; font-size: 11px; }
-    .download-editor-sub { display: none; }
-    .switch-mode-btn { padding: 6px 10px; font-size: 11px; }
-    .switch-mode-sub { display: none; }
+    .app-header { gap: 6px; flex-direction: column; }
+    .header-btn-group {
+      position: static;
+      transform: none;
+      flex-direction: row;
+      justify-content: center;
+      width: auto;
+    }
+    .download-editor-btn { padding: 5px 8px; font-size: 10px; width: auto; }
+    .switch-mode-btn { padding: 5px 8px; font-size: 10px; width: auto; }
     .back-to-consulting-btn { padding: 7px 12px; font-size: 12px; }
   }
   .layout {
@@ -1672,12 +1692,12 @@
 <div class="app">
   <div class="app-header">
     <h1>아르떼조명 상담용 이미지 생성기 (C/S 센터)</h1>
-    <div style="display:flex;gap:8px;align-items:center;">
+    <div class="header-btn-group">
       <button class="switch-mode-btn" onclick="switchToBlueprint()" title="도면용 이미지 생성기로 전환">
-        📐 도면용 이미지 생성기<span class="switch-mode-sub">전환하기</span>
+        📐 도면용 생성기
       </button>
       <button class="download-editor-btn" onclick="downloadEditor()" title="이 편집기를 PC/폰에 저장해서 인터넷 없이도 사용할 수 있어요">
-        💾 편집기 다운로드<span class="download-editor-sub">오프라인용</span>
+        💾 편집기 저장
       </button>
     </div>
   </div>
